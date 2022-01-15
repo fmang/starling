@@ -19,9 +19,15 @@ Pour faire tourner Starling, il faut :
 Chez moi, il s’agit d’un Raspberry Pi 2 avec un dongle Huawei E3131.
 
 Pour que le dongle soit reconnu comme modem USB et non comme périphérique de
-stockage, il m’a suffit d’installer usb_modeswitch. Pour faire ensuite en sorte
-que le périphérique ait un nom constant et soit accessible avec l’utilisateur
-Starling, faire une règle udev.
+stockage, il m’a suffit d’installer usb_modeswitch.
+
+Pour faire ensuite en sorte que le périphérique ait un nom constant et soit
+accessible avec l’utilisateur Starling, faire une règle udev. La règle udev en
+ce qui me concerne est la suivante :
+
+```
+SUBSYSTEM=="tty", ATTRS{idVendor}=="12d1", ATTRS{idProduct}=="1506", ENV{ID_USB_INTERFACE_NUM}=="03", GROUP="gsm", MODE="0660", SYMLINK+="ttyGSM"
+```
 
 Architecture
 ------------
