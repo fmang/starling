@@ -75,7 +75,7 @@ def sanitize_message(text):
 
 def send_sms(recipient, text):
     command_line = ['gammu-smsd-inject']
-    gammu_config = os.environ['GAMMU_SMSD_CONFIG']
+    gammu_config = os.environ.get('GAMMU_SMSD_CONFIG')
     if gammu_config:
         command_line.append('-c')
         command_line.append(gammu_config)
