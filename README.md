@@ -38,10 +38,11 @@ modules, chacun traitant une commande. Ainsi, si le pilote signale qu’un SMS
 « hello world » arrive, le répartiteur le transférera au module *hello*, puis
 retransmettra en sens inverse la sortie du module vers le pilote comme réponse.
 
-Le pilote contrôle la boucle principale du daemon Starling. Il est en
-permanence à l’écoute des SMS entrants, et les envoie aux répartiteur pour
-traitement. Il formate ensuite la réponse en SMS et l’envoie sur le réseau
-mobile à l’expéditeur initial.
+Quoiqu’il n’est pas exactement conçu pour les bots, le daemon gammu-smsd fait
+le travail en tant que pilote. Utilisons-le donc tant qu’il répond à peu près à
+nos besoins. Pour l’intégrer à Starling, il suffit de configurer dans
+gammu-smsdrc la directive RunOnReceive avec le chemin vers l’exécutable du
+répartiteur, c’est-à-dire l’exécutable `starling`.
 
 Les modules sont une collection de programmes, indépendants ou non, réagissant
 aux SMS reçus. C’est eux qui implémentent toute la logique des commandes. Le
@@ -52,7 +53,8 @@ Protocole des modules
 ---------------------
 
 Un module est un fichier exécutable, ou un lien symbolique vers un fichier
-exécutable, situé directement sous MODULES_PATH.
+exécutable, situé directement sous le dossier `modules/` de l’installation
+Starling.
 
 À la réception d’un SMS, le module est appelé. Le contenu du SMS est envoyé en
 UTF-8 sur son entrée standard. Le numéro de l’expéditeur est renseigné dans la
