@@ -1,0 +1,9 @@
+#!/bin/sh
+cat <<EOF
+Starling <https://github.com/fmang/starling>
+
+Commandes disponibles :
+- ping
+- ratp trafic
+- ratp (bus|métro|tram|rer) LIGNE ARRÊT
+EOF
