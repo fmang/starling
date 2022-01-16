@@ -17,6 +17,12 @@ import subprocess
 import sys
 
 
+# Définit la taille maximum de la réponse. Ça correspond à 5 SMS en alphabet
+# standard, ou bien 10 en SMS Unicode. Tout message plus long que ça sera
+# tronqué.
+MAX_SMS_LENGTH = 700
+
+
 def read_sms():
     """
     Logique pour obtenir le contenu du SMS, reprise de l’exemple dans la
@@ -68,8 +74,8 @@ def sanitize_message(text):
     Transforme le message si nécessaire pour ne pas qu’il fasse exploser le
     modem téléphonique.
     """
-    if len(text) > 700:
-        text = text[:697] + '...'
+    if len(text) > MAX_SMS_LENGTH:
+        text = text[:MAX_SMS_LENGTH - 3] + '...'
     return text
 
 
@@ -82,6 +88,8 @@ def send_sms(recipient, text):
     command_line.append('--')
     command_line.append('TEXT')
     command_line.append(recipient)
+    command_line.append('-len')  # Utiliser -autolen pour avoir de l’Unicode.
+    command_line.append(str(MAX_SMS_LENGTH))
 
     text = sanitize_message(text)
     subprocess.run(command_line, input=text, text=True, check=True)

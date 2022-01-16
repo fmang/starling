@@ -34,17 +34,17 @@ sub starling {
 }
 
 is(starling('ping'), <<EOF, 'responds to ping');
-# gammu-smsd-inject -- TEXT 000
+# gammu-smsd-inject -- TEXT 000 -len 700
 Pong !
 EOF
 
 is(starling('PING'), <<EOF, 'is case insensitive');
-# gammu-smsd-inject -- TEXT 000
+# gammu-smsd-inject -- TEXT 000 -len 700
 Pong !
 EOF
 
 is(starling('long') . "\n", <<EOF, 'truncates long messages');
-# gammu-smsd-inject -- TEXT 000
+# gammu-smsd-inject -- TEXT 000 -len 700
 123456789 123456789 123456789 123456789 123456789
 123456789 123456789 123456789 123456789 123456789
 123456789 123456789 123456789 123456789 123456789
