@@ -111,10 +111,24 @@ def dispatch_sms(sender, text):
         send_sms(sender, response)
 
 
+def check_sender(sender):
+    """
+    Vérifie que le numéro de l’expéditeur est connu, car on ne veut pas prendre
+    le risque d’envoyer un SMS à un inconnu, ou bien à une boite automatique
+    qui nous aurait envoyé de la pub. Les numéros sont normalement tous
+    préfixés par un `+` suivi du code de pays.
+    """
+    whitelist = open('numéros_autorisés', 'r')
+    return any(number.strip() == sender for number in whitelist)
+
+
 def main():
     sender = os.environ["SMS_1_NUMBER"]
-    text = read_sms()
-    dispatch_sms(sender, text)
+    if check_sender(sender):
+        text = read_sms()
+        dispatch_sms(sender, text)
+    else:
+        print(f"Numéro inconnu : {sender}", file=sys.stderr)
     return 0
 
 
