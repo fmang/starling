@@ -1,0 +1,149 @@
+#!/usr/bin/env python
+
+"""
+Module RATP pour obtenir les prochaines passages à un arrêt de bus ou de train.
+
+La RATP expose une API SOAP pour obtenir les horaires en temps réel, voir
+<https://data.ratp.fr/pages/temps-reel/>. Pour l’utiliser, il faut s’inscrire
+auprès le la RATP en envoyant un formulaire PDF par mél, et avoir une IP fixe.
+
+Quelqu’un de bien propose cependant une API REST beaucoup plus facile à
+utiliser. Voir <https://github.com/pgrimaud/horaires-ratp-api>. C’est celle-ci
+que ce module utilise.
+"""
+
+
+from collections import deque
+import requests
+import sys
+
+import editdistance
+
+
+USAGE = "Usage: ratp (rer|bus|métro|tram) LIGNE ARRÊT"
+
+# Traduit les types de ligne que notre module accepte en types normalisés pour
+# l’API REST.
+LINE_TYPES = {
+    "bus": "buses",
+    "métro": "metros",
+    "metro": "metros",
+    "tram": "tramways",
+    "tramway": "tramways",
+    "rer": "rers",
+}
+
+# Ensemble des caractères qu’on autorise dans un nom de ligne. On suppose que
+# les numéros de ligne ont déjà été normalisés en bas de casse.
+SAFE_CHARACTERS = set("0123456789-abcdefghijklmnopqrstuvwxyz")
+
+API_BASE = "https://api-ratp.pierre-grimaud.fr/v4"
+
+
+class BadUsage(Exception):
+    """
+    Interrompt l’exécution du module avec une message qui sera envoyé par SMS à
+    l’utilisateur, avec les instructions d’utilisation.
+    """
+
+
+def find_stop(line_type, line_code, stop_name):
+    """
+    Utilise la distance de Levenshtein pour trouver l’arrêt avec le nom le plus
+    proche de ce qu’a entré l’utilisateur. Ça rattrape les fautes de frappe et
+    les différences d’accent, mais ne gère pas du tout les abréviations.
+
+    Renvoie un dico avec les clés *name* et *slug*, par exemple :
+    `{ "name": "Porte des Lilas", "slug": "porte+des+lilas" }`
+    """
+    r = requests.get(f"{API_BASE}/stations/{line_type}/{line_code}")
+    if r.status_code != 200:
+        raise BadUsage("Ligne invalide.")
+
+    stops = r.json()["result"]["stations"]
+    if not stops:
+        raise BadUsage("Aucun arrêt trouvé.")
+
+    stop_name = stop_name.lower()
+
+    def distance(candidate):
+        return editdistance.eval(candidate["name"].lower(), stop_name)
+
+    return min(stops, key=distance)
+
+
+def print_schedules(json):
+    """
+    Formate et affiche une réponse API sur les prochains passage d’une ligne à
+    un arrêt.
+    """
+    for schedule in json["result"]["schedules"]:
+        message = schedule["message"]
+        destination = schedule["destination"]
+        code = schedule.get("code")  # Nom du RER. Absent pour les bus.
+        if code:
+            print(f"{message} - {code} {destination}")
+        else:
+            print(f"{message} - {destination}")
+
+
+def show_schedules(line_type, line_code, stop_code):
+    """
+    Consulte et affiche les horaires pour un arrêt d’une ligne donné. Il faut
+    faire 2 requêtes : un pour la direction aller, et l’autre pour la direction
+    retour. Même en cas d’erreur on obtient un 200, donc on se contente
+    d’afficher bêtement ce qu’on récupère.
+
+    Si la réponse a un format inattendu, ou bien que l’API plante pour X
+    raison, on aura une erreur dans les journaux, mais aucun SMS ne sera émis.
+    """
+    base_url = f"{API_BASE}/schedules/{line_type}/{line_code}/{stop_code}"
+
+    forth = requests.get(f"{base_url}/A")
+    forth.raise_for_status()
+
+    back = requests.get(f"{base_url}/R")
+    back.raise_for_status()
+
+    print_schedules(forth.json())
+    print()
+    print_schedules(back.json())
+
+
+def run(args):
+    """
+    Extrait les informations du SMS de l’utilisateur et fait l’action demandée.
+    """
+    args = deque(args)
+    if len(args) < 4:
+        raise BadUsage("Arguments manquant.")
+
+    args.popleft()  # Nom de la commande.
+
+    line_type = LINE_TYPES.get(args.popleft().lower())
+    if not line_type:
+        raise BadUsage("Type de ligne non reconnu.")
+
+    line_code = args.popleft().lower()
+    if not set(line_code).issubset(SAFE_CHARACTERS):
+        raise BadUsage("Numéro de ligne invalide.")
+
+    stop_name = " ".join(args)
+    stop = find_stop(line_type, line_code, stop_name)
+    print(f"Arrêt {stop['name']}")
+    print()
+
+    show_schedules(line_type, line_code, stop["slug"])
+
+
+def main():
+    try:
+        run(sys.stdin.read().split())
+    except BadUsage as e:
+        print(e)
+        print(USAGE)
+        return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
