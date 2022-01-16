@@ -22,12 +22,7 @@ Pour que le dongle soit reconnu comme modem USB et non comme périphérique de
 stockage, il m’a suffit d’installer usb_modeswitch.
 
 Pour faire ensuite en sorte que le périphérique ait un nom constant et soit
-accessible avec l’utilisateur Starling, faire une règle udev. La règle udev en
-ce qui me concerne est la suivante :
-
-```
-SUBSYSTEM=="tty", ATTRS{idVendor}=="12d1", ATTRS{idProduct}=="1506", ENV{ID_USB_INTERFACE_NUM}=="03", GROUP="gsm", MODE="0660", SYMLINK+="ttyGSM"
-```
+accessible avec l’utilisateur Starling, faire une règle udev.
 
 Architecture
 ------------
@@ -69,3 +64,7 @@ journaux.
 
 Les réponses trop longues pour un SMS sont automatiquement segmentées par
 Starling, et celles trop longues même avec la segmentation seront tronqués.
+
+Le répertoire de travail dans lequel les modules sont exécutés est destiné à
+contenir leur données persistées. Tous les modules partagent ce même
+répertoire, donc libre à eux de coopérer.
