@@ -20,7 +20,7 @@ import sys
 import editdistance
 
 
-USAGE = "Usage: ratp (rer|bus|métro|tram) LIGNE ARRÊT"
+USAGE = "Usage: ratp trafic | ratp (rer|bus|métro|tram) LIGNE ARRÊT"
 
 # Traduit les types de ligne que notre module accepte en types normalisés pour
 # l’API REST.
@@ -31,6 +31,14 @@ LINE_TYPES = {
     "tram": "tramways",
     "tramway": "tramways",
     "rer": "rers",
+}
+
+# Conversion entre les types de ligne utilisés dans l’API et quelque chose de
+# plus humain.
+LINE_NAMES = {
+    "metros": "Métro",
+    "rers": "RER",
+    "tramways": "Tram",
 }
 
 # Ensemble des caractères qu’on autorise dans un nom de ligne. On suppose que
@@ -110,24 +118,65 @@ def show_schedules(line_type, line_code, stop_code):
     print_schedules(back.json())
 
 
+def show_traffic():
+    """
+    Consulte et affiche les informations trafic RATP. Les lignes sans incident,
+    ou avec des travaux mais rien ne de plus sont omises de le réponse pour ne
+    pas charger inutilement le SMS.
+
+    Si tout le réseau est vert, on répond quand même quelque chose pour ne pas
+    laisser croire que la commande plante.
+    """
+    r = requests.get(f"{API_BASE}/traffic")
+    r.raise_for_status()
+
+    all_ok = True
+
+    for line_type, lines in r.json()["result"].items():
+        line_name = LINE_NAMES[line_type]
+        for line in lines:
+            if line["slug"] in ["normal", "normal_trav"]:
+                continue
+            if all_ok:
+                all_ok = False
+            else:
+                print()  # Séparateur.
+            print(f"{line_name} {line['line']} : {line['title']}")
+            print(line['message'])
+
+    if all_ok:
+        print('Rien à signaler.')
+
+
 def run(args):
     """
     Extrait les informations du SMS de l’utilisateur et fait l’action demandée.
     """
     args = deque(args)
-    if len(args) < 4:
+    if len(args) < 2:
         raise BadUsage("Arguments manquant.")
 
     args.popleft()  # Nom de la commande.
 
-    line_type = LINE_TYPES.get(args.popleft().lower())
+    subcommand = args.popleft().lower()
+    if subcommand in ["trafic", "traffic"]:
+        show_traffic()
+        return
+
+    line_type = LINE_TYPES.get(subcommand)
     if not line_type:
         raise BadUsage("Type de ligne non reconnu.")
+
+    # On est ici dans le cas où on cherche les prochains passage.
+    # Il doit nous rester deux arguments : la ligne et l’arrêt.
+    if len(args) < 2:
+        raise BadUsage("Arguments manquant.")
 
     line_code = args.popleft().lower()
     if not set(line_code).issubset(SAFE_CHARACTERS):
         raise BadUsage("Numéro de ligne invalide.")
 
+    # Concatène tous les arguments restants pour former le nom de l’arrêt.
     stop_name = " ".join(args)
     stop = find_stop(line_type, line_code, stop_name)
     print(f"Arrêt {stop['name']}")
