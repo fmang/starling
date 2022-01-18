@@ -127,7 +127,7 @@ def check_sender(sender):
     préfixés par un `+` suivi du code de pays.
     """
     whitelist = open('numéros_autorisés', 'r')
-    return any(number.strip() == sender for number in whitelist)
+    return any(extract_first_word(line) == sender for line in whitelist)
 
 
 def main():
