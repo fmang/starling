@@ -1,0 +1,9 @@
+#!/bin/sh
+
+# Faute d’avoir suffisamment d’expérience ou de confiance dans Gammu, prévoyons
+# un bouton d’arrêt d’urgence au cas où il dégénèrerait, par exemple en se
+# mettant à envoyer en boucle un SMS à quelqu’un.
+
+echo "Arrêt demandé par $SENDER" >&2
+
+killall -9 gammu-smsd

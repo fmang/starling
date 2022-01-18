@@ -4,6 +4,7 @@ Starling <https://github.com/fmang/starling>
 
 Commandes disponibles :
 - ping
+- stop : tue Starling
 - ratp trafic
 - ratp (bus|métro|tram|rer) LIGNE ARRÊT
 EOF
