@@ -16,6 +16,7 @@ que ce module utilise.
 from collections import deque
 import requests
 import sys
+import unicodedata
 
 import editdistance
 
@@ -55,11 +56,48 @@ class BadUsage(Exception):
     """
 
 
-def find_stop(line_type, line_code, stop_name):
+def transliterate(text):
     """
-    Utilise la distance de Levenshtein pour trouver l’arrêt avec le nom le plus
-    proche de ce qu’a entré l’utilisateur. Ça rattrape les fautes de frappe et
-    les différences d’accent, mais ne gère pas du tout les abréviations.
+    Simplifie le texte donné en enlevant les accents et caractères spéciaux.
+    Normalise également le tout en bas de casse.
+    """
+    return (unicodedata.normalize('NFKD', text)
+                       .encode('ascii', 'ignore')
+                       .decode('ascii')
+                       .lower())
+
+
+def best_match(options, keywords, key=lambda x: x):
+    """
+    Parmi une liste d’option, trouve celle dont key(option) correspond le mieux
+    aux mots-clés donnés. key(option) et chaque mot-clé doivent être des str.
+    Voir find_stop pour le comportement global souhaité.
+    """
+    keywords = [transliterate(kw) for kw in keywords]
+    query = " ".join(keywords)
+
+    def matches_keywords(option):
+        name = transliterate(key(option))
+        return all(kw in name for kw in keywords)
+
+    def distance(option):
+        return editdistance.eval(transliterate(key(option)), query)
+
+    candidates = list(filter(matches_keywords, options)) or options
+    return min(candidates, key=distance)
+
+
+def find_stop(line_type, line_code, stop_keywords):
+    """
+    Recherche l’arrêt le plus proche de ce que l’utilisateur voudrait à partir
+    d’une liste de mots-clés entrés. On commence par chercher les arrêts qui
+    contiennent les mots-clés, puis parmi les candidats on utilisera la
+    distance de Levenshtein pour sélectionner le meilleur.
+
+    En cas de faute de frappe, la recherche par infixe échouera et on comptera
+    uniquement sur la distance de Levenshtein. Elle est moins souhaitable car
+    rechercher « Saintt Michel » donnera par exemple « Le Guichet » alors qu’on
+    préfèrerait clairement « Saint-Michel Notre-Dame ».
 
     Renvoie un dico avec les clés *name* et *slug*, par exemple :
     `{ "name": "Porte des Lilas", "slug": "porte+des+lilas" }`
@@ -72,12 +110,7 @@ def find_stop(line_type, line_code, stop_name):
     if not stops:
         raise BadUsage("Aucun arrêt trouvé.")
 
-    stop_name = stop_name.lower()
-
-    def distance(candidate):
-        return editdistance.eval(candidate["name"].lower(), stop_name)
-
-    return min(stops, key=distance)
+    return best_match(stops, stop_keywords, key=lambda stop: stop["name"])
 
 
 def print_schedules(json):
@@ -177,8 +210,7 @@ def run(args):
         raise BadUsage("Numéro de ligne invalide.")
 
     # Concatène tous les arguments restants pour former le nom de l’arrêt.
-    stop_name = " ".join(args)
-    stop = find_stop(line_type, line_code, stop_name)
+    stop = find_stop(line_type, line_code, args)
     print(f"Arrêt {stop['name']}")
     print()
 
