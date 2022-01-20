@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use utf8;
 
-use Test::More tests => 4;
+use Test::More tests => 5;
 
 use Cwd 'abs_path';
 use File::Basename;
@@ -61,6 +61,10 @@ is(starling('long') . "\n", <<EOF, 'truncates long messages');
 123456789 123456789 123456789 123456789 1234567...
 EOF
 
-is(starling('ping', { sender => '007' }), <<EOF, 'rejects unknown numbers')
+is(starling('ping', { sender => '007' }), <<EOF, 'rejects unknown numbers');
 Numéro inconnu : 007
+EOF
+
+is(starling('../modules/ping'), <<EOF, 'rejects shady commands');
+Commande introuvable : ../modules/ping
 EOF
