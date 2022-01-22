@@ -14,6 +14,8 @@ que ce module utilise.
 
 
 from collections import deque
+from datetime import datetime, timedelta
+import re
 import requests
 import sys
 import unicodedata
@@ -47,6 +49,10 @@ LINE_NAMES = {
 SAFE_CHARACTERS = set("0123456789-abcdefghijklmnopqrstuvwxyz")
 
 API_BASE = "https://api-ratp.pierre-grimaud.fr/v4"
+
+TIME_REGEX = re.compile(r"(?P<time>\d+:\d+)")
+
+DURATION_REGEX = re.compile(r"(?P<minutes>\d+)\s*mi?n")
 
 
 class BadUsage(Exception):
@@ -119,13 +125,19 @@ def print_schedules(json):
     un arrêt.
     """
     for schedule in json["result"]["schedules"]:
-        message = schedule["message"]
-        destination = schedule["destination"]
-        code = schedule.get("code")  # Nom du RER. Absent pour les bus.
-        if code:
-            print(f"{message} - {code} {destination}")
-        else:
-            print(f"{message} - {destination}")
+        time = "--:--"
+
+        # Les bus, trams et métros affichent des messages comme « 3 mn ».
+        if m := DURATION_REGEX.search(schedule["message"]):
+            wait = int(m.group("minutes"))
+            time = (datetime.now() + timedelta(minutes=wait)).strftime("%H:%M")
+
+        # Les RER affichent des messages comme « 19:05 Voie 1 ».
+        if m := TIME_REGEX.search(schedule["message"]):
+            time = m.group("time")
+
+        destination = schedule.get("code") or schedule["destination"]
+        print(f"{time} {destination}")
 
 
 def show_schedules(line_type, line_code, stop_code):
