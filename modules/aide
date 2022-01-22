@@ -7,4 +7,5 @@ Commandes disponibles :
 - stop : tue Starling
 - ratp trafic
 - ratp (bus|métro|tram|rer) LIGNE ARRÊT
+- gps LIEU [LAT, LON] [RAYON m]
 EOF
