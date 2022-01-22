@@ -124,6 +124,7 @@ def print_schedules(json):
     Formate et affiche une réponse API sur les prochains passage d’une ligne à
     un arrêt.
     """
+    previous_destination = None
     for schedule in json["result"]["schedules"]:
         time = "--:--"
 
@@ -137,7 +138,11 @@ def print_schedules(json):
             time = m.group("time")
 
         destination = schedule.get("code") or schedule["destination"]
-        print(f"{time} {destination}")
+        if destination == previous_destination:
+            print(time)
+        else:
+            print(f"{time} {destination}")
+            previous_destination = destination
 
 
 def show_schedules(line_type, line_code, stop_code):
