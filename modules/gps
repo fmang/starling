@@ -1,0 +1,218 @@
+#!/usr/bin/env python
+
+"""
+Utilise l’API Nominatim, elle-même utilisant les données OpenStreetMap, pour
+chercher un lieu. Elle a pour but d’aider à trouver un endroit à supposer que
+l’utilisateur n’en est déjà pas très loin.
+"""
+
+
+from collections import deque
+import math
+import re
+import sys
+
+import requests
+
+
+USAGE = "gps LIEU [LAT, LON] [RAYON m]"
+
+EXCLUDED_ADDRESS_FIELDS = ["municipality", "county", "state", "region",
+                           "country", "country_code"]
+
+GPS_COORDINATES_REGEX = \
+  re.compile(r"\b(?P<lat>\d+\.\d+)\s*,?\s*(?P<lon>\d+\.\d+)\b")
+
+SEARCH_RADIUS_REGEX = \
+  re.compile(r"\b(?P<distance>\d+)\s*m\b")
+
+EARTH_RADIUS = 6378000  # m
+
+DEFAULT_SEARCH_RADIUS = 2000  # m
+
+CARDINAL_DIRECTIONS = [
+    'N', 'NNE', 'NE', 'ENE',
+    'E', 'ESE', 'SE', 'SSE',
+    'S', 'SSO', 'SO', 'OSO',
+    'O', 'ONO', 'NO', 'NNO',
+]
+
+
+class BadUsage(Exception):
+    """
+    Interrompt l’exécution du module avec une message qui sera envoyé par SMS à
+    l’utilisateur, avec les instructions d’utilisation.
+    """
+
+
+class Coordinates:
+    def __init__(self, lat, lon):
+        """
+        Construit un objet Coordinates à partir des coordonnées GPS en degrés.
+        Les chaines de caractères sont acceptées, mais seule la notation
+        décimale est supportée.
+        """
+        self.lat = math.radians(float(lat))
+        self.lon = math.radians(float(lon))
+
+    def distance(self, other):
+        """
+        Applique la formule de haversine pour calculer la distance entre deux
+        coordonnées GPS.
+        """
+        Δlat = other.lat - self.lat
+        Δlon = other.lon - self.lon
+        a = math.sin(Δlat / 2) ** 2 + \
+            math.sin(Δlon / 2) ** 2 * math.cos(self.lat) * math.cos(other.lat)
+        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+        return EARTH_RADIUS * c
+
+    def azimuth(self, other):
+        """
+        Donne l’azimuth en degrés pour aller au point donné. 0° indique le
+        nord, 90° l’est, et -90° l’oust.
+        """
+        Δlon = other.lon - self.lon
+        x = math.sin(Δlon) * math.cos(other.lat)
+        y = math.cos(self.lat) * math.sin(other.lat) - \
+            math.sin(self.lat) * math.cos(other.lat) * math.cos(Δlon)
+        a = math.atan2(x, y)
+        return math.degrees(a)
+
+    def bounding_box(self, radius):
+        """
+        Renvoie en degrés les coordonnées (lon1, lat1, lon2, lat2) du carré
+        centré sur self, de rayon donné.
+        """
+        Δlat = radius / EARTH_RADIUS
+        # Suppose qu’on n’est pas aux pôle, sinon on aurait une division par 0.
+        Δlon = radius / (EARTH_RADIUS * math.cos(self.lat))
+        box = (self.lon - Δlon, self.lat - Δlat,
+               self.lon + Δlon, self.lat + Δlat)
+        return map(math.degrees, box)
+
+
+def parse_query(query):
+    """
+    Extrait les options de la recherche de l’utilisateur, telles que les
+    coordonnées de départ et le rayon de recherche.
+
+    Exemple de recherche :
+    `[station] 48.738, 2.253 1000m`
+    """
+    coords = None
+    search_radius = None
+
+    m = GPS_COORDINATES_REGEX.search(query)
+    if m:
+        query = query[:m.start()] + query[m.end():]
+        coords = Coordinates(m.group("lat"), m.group("lon"))
+
+    m = SEARCH_RADIUS_REGEX.search(query)
+    if m:
+        query = query[:m.start()] + query[m.end():]
+        search_radius = int(m.group("distance"))
+
+    return (query, coords, search_radius)
+
+
+def search_location(query, base_location, search_radius):
+    """Consulte l’API Nominatim pour la recherche donnée."""
+    payload = {
+        "q": query,
+        "countrycodes": "fr",
+        "limit": "5",
+        "format": "jsonv2",
+        "addressdetails": "1"
+    }
+
+    if base_location:
+        radius = search_radius or DEFAULT_SEARCH_RADIUS
+        box = base_location.bounding_box(radius)
+        payload["viewbox"] = ",".join(map(str, box))
+        payload["bounded"] = "1"
+
+    headers = {
+        "User-Agent": "Starling <https://github.com/fmang/starling>",
+        "Accept-Language": "fr",
+    }
+    r = requests.get("https://nominatim.openstreetmap.org/search",
+                     params=payload, headers=headers)
+    return r.json()
+
+
+def format_address(r):
+    """
+    Le display_name renvoyé par l’API Nominatim est beaucoup trop long pour un
+    SMS. Utilisons à la place les détails de l’adresse pour générer nous même
+    une chaine utile.
+
+    Ce n’est pas documenté, mais le dico address est ordonné. Il va de
+    l’information la plus spécifique à la moins spécifique. On devrait donc
+    pouvoir exclure les champs trop larges et concaténer le tout.
+
+    Une liste blanche des champs qui nous intéressent est risquée car il existe
+    de nombreuses clés.
+    """
+    return ", ".join(v for k, v in r["address"].items()
+                     if k not in EXCLUDED_ADDRESS_FIELDS)
+
+
+def format_azimuth(a):
+    """
+    Convertit un angle en degré pour donner des directions directions
+    cardinales à la place. Par exemple, 90 devient E.
+    """
+    a %= 360  # Donne un résultat entre 0 et 360.
+    step = 360 / len(CARDINAL_DIRECTIONS)
+    i = round(a / step) % len(CARDINAL_DIRECTIONS)
+    return CARDINAL_DIRECTIONS[i]
+
+
+def print_result(r, base_location):
+    """Formate joliment une adresse retournée par l’API Nominatim."""
+    print(format_address(r))
+    if base_location:
+        location = Coordinates(r["lat"], r["lon"])
+        distance = int(base_location.distance(location))
+        azimuth = format_azimuth(base_location.azimuth(location))
+        print(f"{r['lat']}, {r['lon']} ({distance} m {azimuth})")
+    else:
+        print(f"{r['lat']}, {r['lon']}")
+
+
+def print_results(results, base_location):
+    """Affiche une liste de résultats en les séparant par une ligne vide."""
+    first = True
+    for r in results:
+        if first:
+            first = False
+        else:
+            print()
+        print_result(r, base_location)
+
+
+def run(args):
+    args = deque(args)
+    if len(args) < 2:
+        raise BadUsage("Arguments manquant.")
+
+    args.popleft()  # Nom de la commande.
+    query = " ".join(args)
+
+    terms, base_location, search_radius = parse_query(query)
+    results = search_location(terms, base_location, search_radius)
+    print_results(results, base_location)
+
+
+def main():
+    try:
+        run(sys.stdin.read().split())
+    except BadUsage as e:
+        print(e)
+        print(USAGE)
+        return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
