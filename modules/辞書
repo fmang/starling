@@ -1,0 +1,74 @@
+#!/usr/bin/env python
+
+"""
+Dictionnaire japonais-anglais basé sur EDICT2.
+
+Utilise l’instance live <https://wish.mg0.fr>. Le programme derrière est
+<https://github.com/fmang/wish>.
+"""
+
+
+import requests
+import sys
+
+
+USAGE = "Usage: wdic MOT"
+
+API_BASE = "https://wish.mg0.fr/api"
+
+
+class BadUsage(Exception):
+    """
+    Interrompt l’exécution du module avec une message qui sera envoyé par SMS à
+    l’utilisateur, avec les instructions d’utilisation.
+    """
+
+
+def print_entry(entry):
+    """
+    Formate une définition de mot pour l’afficher dans un SMS.
+    """
+    words = ", ".join(entry["words"])
+    readings = ", ".join(entry["readings"])
+    pos = ", ".join(sorted(entry["pos"]))
+    print(f"{words} [{readings}] {pos}")
+
+    for i, m in enumerate(entry["meanings"], start=1):
+        print(f"{i}. {m}")
+
+
+def print_entries(entries):
+    """Affiche une liste de résultats en les séparant par une ligne vide."""
+    first = True
+    for e in entries:
+        if first:
+            first = False
+        else:
+            print()
+        print_entry(e)
+
+
+def run(args):
+    if len(args) < 2:
+        raise BadUsage("Recherche manquante.")
+    elif len(args) > 2:
+        raise BadUsage("Trop d’arguments.")
+
+    query = args[1]
+    r = requests.get(f"{API_BASE}/exact", {"q": query})
+    r.raise_for_status()
+    # L’API renvoie une liste de définitions.
+    print_entries(r.json())
+
+
+def main():
+    try:
+        run(sys.stdin.read().split())
+    except BadUsage as e:
+        print(e)
+        print(USAGE)
+        return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
