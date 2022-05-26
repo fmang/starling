@@ -13,6 +13,7 @@ niveau que l’exécutable starling.
 
 
 import os
+import re
 import subprocess
 import sys
 
@@ -79,6 +80,16 @@ def sanitize_message(text):
     return text
 
 
+def requires_unicode(text):
+    """
+    Indique si le texte passé vaut la peine d’être envoyé en tant qu’UTF-16,
+    sachant que les SMS seront alors deux fois plus gros. Pour les blocs
+    Unicode CJK, ça vaut le coup, mais pour les accents français rares
+    peut-être pas.
+    """
+    return re.search("[\u2e80-\u9fff]", text) is not None
+
+
 def send_sms(recipient, text):
     command_line = ['gammu-smsd-inject']
     gammu_config = os.environ.get('GAMMU_SMSD_CONFIG')
@@ -88,7 +99,7 @@ def send_sms(recipient, text):
     command_line.append('--')
     command_line.append('TEXT')
     command_line.append(recipient)
-    command_line.append('-len')  # Utiliser -autolen pour avoir de l’Unicode.
+    command_line.append('-autolen' if requires_unicode(text) else '-len')
     command_line.append(str(MAX_SMS_LENGTH))
 
     text = sanitize_message(text)

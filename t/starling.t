@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use utf8;
 
-use Test::More tests => 5;
+use Test::More tests => 6;
 
 use Cwd 'abs_path';
 use File::Basename;
@@ -67,4 +67,9 @@ EOF
 
 is(starling('../modules/ping'), <<EOF, 'rejects shady commands');
 Commande introuvable : ../modules/ping
+EOF
+
+is(starling('挨拶　あ'), <<EOF, 'supports Japanese characters');
+# gammu-smsd-inject -- TEXT 000 -autolen 700
+こんにちは
 EOF
