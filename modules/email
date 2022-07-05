@@ -1,0 +1,64 @@
+#!/usr/bin/env python
+
+"""
+Passerelle SMS → email.
+
+Exemple de SMS :
+
+    email Fred <x@y.z>
+    Corps du message.
+
+"""
+
+from email.message import EmailMessage
+from smtplib import SMTP_SSL
+from urllib.parse import urlparse
+
+import email.utils
+import os
+import sys
+
+
+def plussify(email_address, subaddress):
+    """
+    Ajoute à une adresse email un sous-adresse avec un plus. Si la sous-adresse
+    commence déjà par un plus, il est réutilisé.
+
+    plussify("foo@example.com", "+331234") → "foo+331234@example.com"
+    """
+    if not subaddress.startswith("+"):
+        subaddress = "+" + subaddress
+    return email_address.replace("@", subaddress + "@", 1)
+
+
+def main():
+    header = sys.stdin.readline()
+    args = header.split(maxsplit=1)
+    if len(args) != 2:
+        print("Usage: email TO")
+        return 0
+
+    smtp_url = urlparse(os.environ["SMTP_URL"])
+    sender = os.environ["SMS_1_NUMBER"]
+    from_address = plussify(smtp_url.username, sender)
+    recipient = args[1].strip()
+    body = sys.stdin.read()
+
+    msg = EmailMessage()
+    msg["Date"] = email.utils.formatdate()
+    msg["From"] = email.utils.formataddr((sender, from_address))
+    msg["To"] = recipient
+    msg["Subject"] = "SMS"
+    msg["Message-ID"] = email.utils.make_msgid()
+    msg.set_content(body)
+
+    with SMTP_SSL(smtp_url.hostname) as smtp:
+        smtp.login(smtp_url.username, smtp_url.password)
+        smtp.send_message(msg)
+
+    print("Mél envoyé !")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
