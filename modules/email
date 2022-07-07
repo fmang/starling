@@ -40,13 +40,13 @@ def main():
 
     smtp_url = urlparse(os.environ["SMTP_URL"])
     sender = os.environ["SMS_1_NUMBER"]
-    from_address = plussify(smtp_url.username, sender)
     recipient = args[1].strip()
     body = sys.stdin.read()
 
     msg = EmailMessage()
     msg["Date"] = email.utils.formatdate()
-    msg["From"] = email.utils.formataddr((sender, from_address))
+    msg["From"] = email.utils.formataddr((sender, smtp_url.username))
+    msg["Reply-To"] = plussify(smtp_url.username, sender)
     msg["To"] = recipient
     msg["Subject"] = "SMS"
     msg["Message-ID"] = email.utils.make_msgid()
