@@ -16,6 +16,7 @@ import os
 import re
 import subprocess
 import sys
+import yaml
 
 
 # Définit la taille maximum de la réponse. Ça correspond à 5 SMS en alphabet
@@ -137,8 +138,9 @@ def check_sender(sender):
     qui nous aurait envoyé de la pub. Les numéros sont normalement tous
     préfixés par un `+` suivi du code de pays.
     """
-    whitelist = open('numéros_autorisés', 'r')
-    return any(extract_first_word(line) == sender for line in whitelist)
+    with open('users.yml') as f:
+        users = yaml.full_load(f)
+    return sender in users
 
 
 def main():

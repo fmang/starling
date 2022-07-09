@@ -17,7 +17,7 @@ Son $HOME aura l’allure suivante :
 ```
 /home/starling/
 ├── data/
-│   └── numéros_autorisés
+│   └── users.yml
 ├── dev/
 │   └── starling/
 ├── gammu/
@@ -37,9 +37,9 @@ Starling
 --------
 
 Pour l’instant la configuration de Starling même est quasi-inexistante, à
-l’exception du fichier `data/numéros_autorisés`. Il doit contenir une liste de
-numéros au format international, par exemple `+336XXXXXXXX`, un par ligne.
-Chaque numéro peut être suivi d’un commentaire.
+l’exception du fichier `data/users.yml`. Il doit contenir un dictionnaire dont
+les clés sont des numéros au format international, par exemple `+336XXXXXXXX`.
+La sous-clé `name` indique le nom de l’utilisateur.
 
 Les messages provenant d’autres numéros seront supprimés.
 
