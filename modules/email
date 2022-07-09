@@ -17,18 +17,29 @@ from urllib.parse import urlparse
 import email.utils
 import os
 import sys
+import yaml
 
 
-def plussify(email_address, subaddress):
+def make_sender(email_address):
     """
-    Ajoute à une adresse email un sous-adresse avec un plus. Si la sous-adresse
-    commence déjà par un plus, il est réutilisé.
-
-    plussify("foo@example.com", "+331234") → "foo+331234@example.com"
+    Construit la valeur du champ From: du mél à envoyer. Il aura la forme
+    `Foo +33123456789 <x@y.z>`, où Foo est déduit du users.yml. Il aurait été
+    sympa de mettre des parenthèses mais elles ont tendance à disparaitre car
+    c’est la notation pour écrire des commentaires dans des adresses mél.
     """
-    if not subaddress.startswith("+"):
-        subaddress = "+" + subaddress
-    return email_address.replace("@", subaddress + "@", 1)
+    sender_number = os.environ["SENDER"]
+
+    with open("users.yml") as f:
+        users = yaml.full_load(f)
+    user = users.get(sender_number)
+    user_name = user.get("name") if user is not None else None
+
+    if user_name is not None:
+        sender_name = f"{user_name} {sender_number}"
+    else:
+        sender_name = sender_number
+
+    return email.utils.formataddr((sender_name, email_address))
 
 
 def main():
@@ -39,14 +50,12 @@ def main():
         return 0
 
     smtp_url = urlparse(os.environ["SMTP_URL"])
-    sender = os.environ["SMS_1_NUMBER"]
     recipient = args[1].strip()
     body = sys.stdin.read()
 
     msg = EmailMessage()
     msg["Date"] = email.utils.formatdate()
-    msg["From"] = email.utils.formataddr((sender, smtp_url.username))
-    msg["Reply-To"] = plussify(smtp_url.username, sender)
+    msg["From"] = make_sender(smtp_url.username)
     msg["To"] = recipient
     msg["Subject"] = "SMS"
     msg["Message-ID"] = email.utils.make_msgid()
