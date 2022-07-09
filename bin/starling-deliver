@@ -1,0 +1,117 @@
+#!/usr/bin/env python
+
+
+"""
+Mail Delivery Agent pour Starling. Il s’agit d’un programme complémentaire au
+module email de Starling : au lieu de convertir un SMS en mél, il convertit un
+mél en SMS.
+
+Il est conçu pour s’intégrer avec fetchmail --mda.
+"""
+
+
+import email
+import email.policy
+import os
+import re
+import subprocess
+import sys
+import yaml
+
+
+# Capture un numéro de téléphone français.
+PHONE_NUMBER_REGEX = re.compile(r"\+33[0-9]{9}(?![0-9])")
+
+MAX_BODY_LENGTH = 140
+MAX_SMS_LENGTH = 210
+
+
+class BadEmail(Exception):
+    """
+    Indique que le mél n’est pas traitable par Starling. Il sera marqué comme
+    lu pour ne plus être traité aux itérations suivantes.
+    """
+
+
+def extract_recipient(mail):
+    """
+    Extrait du mél le numéro de téléphone du destinataire. On s’attend à ce que
+    le mél ait une en-tête `To: Foo (+331…) <foo@example.com>`.
+    """
+    recipient = mail["To"]
+    if recipient is None:
+        raise BadEmail("Aucun destinataire.")
+
+    m = re.search(PHONE_NUMBER_REGEX, recipient)
+    if m is None:
+        raise BadEmail("Impossible de déduire le numéro du destinataire.")
+
+    return m[0]
+
+
+def check_recipient(number):
+    """
+    Vérifie que le destinataire est connu pour ne pas permettre d’envoyer des
+    SMS à n’import qui.
+    """
+    with open("users.yml") as f:
+        users = yaml.full_load(f)
+    if number not in users:
+        raise BadEmail("Destinataire non autorisé.")
+
+
+def extract_body(mail):
+    """
+    Extrait le corps du mél entrant pour récupérer le contenu du message à
+    envoyer par SMS. Il est tronqué pour ne pas être trop volumineux. La limite
+    de 140 caractères reprend la taille traditionnelle des SMS, mais sachant
+    qu’on ajoutera des en-têtes, et qu’on enverra le message en UTF-16, on
+    enverra finalement plutôt dans les 3 SMS.
+    """
+    body = mail.get_body(preferencelist=("plain",))
+    if body is None:
+        raise BadEmail("Aucune version texte du message.")
+
+    message = body.get_content()
+    if len(message) > MAX_BODY_LENGTH:
+        message = message[:MAX_BODY_LENGTH] + "..."
+
+    return message
+
+
+def send_sms(recipient, text):
+    command_line = ['gammu-smsd-inject']
+    gammu_config = os.environ.get('GAMMU_SMSD_CONFIG')
+    if gammu_config:
+        command_line.append('-c')
+        command_line.append(gammu_config)
+    command_line.append('--')
+    command_line.append('TEXT')
+    command_line.append(recipient)
+    command_line.append('-autolen')
+    command_line.append(str(MAX_SMS_LENGTH))
+
+    subprocess.run(command_line, input=text, text=True, check=True)
+
+
+def main():
+    mail = email.message_from_binary_file(sys.stdin.buffer,
+                                          policy=email.policy.default)
+
+    recipient = extract_recipient(mail)
+    check_recipient(recipient)
+    sender = mail.get("From", "Inconnu")
+    body = extract_body(mail)
+
+    message = f"De : {sender}\n{body}"
+    send_sms(recipient, message)
+
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except BadEmail as e:
+        print(e, file=sys.stderr)
+        sys.exit(0)
